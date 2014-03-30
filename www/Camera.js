@@ -1,4 +1,4 @@
-/*
+cordova.define("org.apache.cordova.camera.camera", function(require, exports, module) { /*
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -60,9 +60,17 @@ cameraExport.getPicture = function(successCallback, errorCallback, options) {
     var popoverOptions = getValue(options.popoverOptions, null);
     var cameraDirection = getValue(options.cameraDirection, Camera.Direction.BACK);
 
+    //var args = [quality, destinationType, sourceType, targetWidth, targetHeight, encodingType,
+    //            mediaType, allowEdit, correctOrientation, saveToPhotoAlbum, popoverOptions, cameraDirection];
+    
+    //头像裁切框比例 默认1:1 Add By ZhuShunqing
+    var aspectX = getValue(options.aspectX, 1);
+    var aspectY = getValue(options.aspectY, 1);
     var args = [quality, destinationType, sourceType, targetWidth, targetHeight, encodingType,
-                mediaType, allowEdit, correctOrientation, saveToPhotoAlbum, popoverOptions, cameraDirection];
-
+                mediaType, allowEdit, correctOrientation, saveToPhotoAlbum, popoverOptions, cameraDirection,
+                aspectX, aspectY //增加裁切宽高参数 Add By ZhuShunqing
+                ];
+                
     exec(successCallback, errorCallback, "Camera", "takePicture", args);
     // XXX: commented out
     //return new CameraPopoverHandle();
@@ -73,3 +81,5 @@ cameraExport.cleanup = function(successCallback, errorCallback) {
 };
 
 module.exports = cameraExport;
+
+});
