@@ -1,4 +1,5 @@
-cordova.define("org.apache.cordova.camera.camera", function(require, exports, module) { /*
+
+/*
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -81,5 +82,3 @@ cameraExport.cleanup = function(successCallback, errorCallback) {
 };
 
 module.exports = cameraExport;
-
-});
