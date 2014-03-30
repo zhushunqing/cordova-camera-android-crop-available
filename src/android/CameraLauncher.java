@@ -86,6 +86,11 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
     private boolean correctOrientation;     // Should the pictures orientation be corrected
     private boolean orientationCorrected;   // Has the picture's orientation been corrected
     //private boolean allowEdit;              // Should we allow the user to crop the image. UNUSED.
+    
+    //Add By ZhuShunqing
+    private boolean allowEdit;              //已自定义为开启头像裁切功能
+    private int aspectX, aspectY;           //头像裁切框比例
+    private String tmpfile;                 //裁切临时文件
 
     public CallbackContext callbackContext;
     private int numPics;
@@ -125,6 +130,11 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
             this.correctOrientation = args.getBoolean(8);
             this.saveToPhotoAlbum = args.getBoolean(9);
 
+            //接受裁切比例参数 Add By ZhuShunqing
+            this.aspectX = args.getInt(12);
+            this.aspectY = args.getInt(13);
+            this.allowEdit = args.getBoolean(7);
+            
             // If the user specifies a 0 or smaller width/height
             // make it -1 so later comparisons succeed
             if (this.targetWidth < 1) {
@@ -201,19 +211,47 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
 
         // Display camera
         Intent intent = new Intent("android.media.action.IMAGE_CAPTURE");
-
+        
         // Specify file so that large image is captured and returned
         File photo = createCaptureFile(encodingType);
-        intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, Uri.fromFile(photo));
         this.imageUri = Uri.fromFile(photo);
+        intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, this.imageUri);
 
+        //开启自带图像裁切功能 Add By ZhuShunqing
+        //if(this.allowEdit){
+        //    intent.putExtra("crop", "true"); //有些机型上会报错
+        //    intent.putExtra("aspectX", this.aspectX);// 裁剪框比例
+        //    intent.putExtra("aspectY", this.aspectY);
+        //}
+ 
         if (this.cordova != null) {
             this.cordova.startActivityForResult((CordovaPlugin) this, intent, (CAMERA + 1) * 16 + returnType + 1);
         }
 //        else
 //            LOG.d(LOG_TAG, "ERROR: You must use the CordovaInterface for this to work correctly. Please implement it in your activity");
     }
-
+    
+    //调用系统裁图 Add By ZhuShunqing
+    private void cropImageUri(Uri uri){
+        Intent intent = new Intent("com.android.camera.action.CROP");
+        intent.setDataAndType(uri, "image/*");
+        intent.putExtra("crop", "true");
+        intent.putExtra("aspectX", aspectX);
+        intent.putExtra("aspectY", aspectY);
+        if(targetWidth > 0) //如果指定输出宽度
+            intent.putExtra("outputX", targetWidth);
+        if(targetHeight > 0) //如果指定输出高度
+            intent.putExtra("outputY", targetHeight);
+        intent.putExtra("scale", true);
+        intent.putExtra(MediaStore.EXTRA_OUTPUT, this.imageUri);
+        intent.putExtra("return-data", false);
+        intent.putExtra("outputFormat", Bitmap.CompressFormat.JPEG.toString());
+        intent.putExtra("noFaceDetection", true); // no face detection
+        if (this.cordova != null) {
+            this.cordova.startActivityForResult((CordovaPlugin) this, intent, 1);
+        }
+    }
+    
     /**
      * Create a file in the applications temporary directory based upon the supplied encoding.
      *
@@ -221,6 +259,19 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
      * @return a File object pointing to the temporary picture
      */
     private File createCaptureFile(int encodingType) {
+        //指定临时文件 Add By ZhuShunqing
+        tmpfile = getTempDirectoryPath() + ".tmp";
+        if (encodingType == JPEG) {
+            tmpfile += ".jpg";
+        } else if (encodingType == PNG) {
+            tmpfile += ".png";
+        }else {
+            throw new IllegalArgumentException("Invalid Encoding Type: " + encodingType);
+        }
+        Log.d("TAG", tmpfile);
+        File photo = new File(this.tmpfile);
+        return photo;
+/*      
         File photo = null;
         if (encodingType == JPEG) {
             photo = new File(getTempDirectoryPath(), ".Pic.jpg");
@@ -230,6 +281,7 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
             throw new IllegalArgumentException("Invalid Encoding Type: " + encodingType);
         }
         return photo;
+*/        
     }
 
     /**
@@ -257,6 +309,21 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
             title = GET_All;
         }
 
+        //开启系统图像裁切功能 Add By ZhuShunqing
+        if(this.allowEdit){
+//          intent.putExtra("crop", "true");
+//          intent.putExtra("aspectX", this.aspectX);// 裁剪框比例
+//          intent.putExtra("aspectY", this.aspectY);
+//          if(targetWidth > 0) //如果指定输出宽度
+//              intent.putExtra("outputX", targetWidth);
+//          if(targetHeight > 0) //如果指定输出高度
+//              intent.putExtra("outputY", targetHeight);
+//          // Specify file so that large image is captured and returned
+            File photo = createCaptureFile(encodingType);
+//          intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, Uri.fromFile(photo));
+            this.imageUri = Uri.fromFile(photo);
+        }
+      
         intent.setAction(Intent.ACTION_GET_CONTENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         if (this.cordova != null) {
@@ -278,7 +345,8 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
         ExifHelper exif = new ExifHelper();
         try {
             if (this.encodingType == JPEG) {
-                exif.createInFile(getTempDirectoryPath() + "/.Pic.jpg");
+                exif.createInFile(this.tmpfile); //Add By ZhuShunqing
+//                exif.createInFile(getTempDirectoryPath() + "/.Pic.jpg");
                 exif.readExifData();
                 rotate = exif.getOrientation();
             }
@@ -358,10 +426,14 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
 
             }
             // Send Uri back to JavaScript for viewing image
-            this.callbackContext.success(uri.toString());
+            if(this.allowEdit){ //Add By ZhuShunqing
+                this.cropImageUri(uri);
+            }else{
+                this.callbackContext.success(uri.toString());
+                this.cleanup(FILE_URI, this.imageUri, uri, bitmap);
+            }
         }
 
-        this.cleanup(FILE_URI, this.imageUri, uri, bitmap);
         bitmap = null;
     }
     
@@ -412,7 +484,16 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
             // rotating, nor compressing needs to be done
             if (this.targetHeight == -1 && this.targetWidth == -1 &&
                     (destType == FILE_URI || destType == NATIVE_URI) && !this.correctOrientation) {
-                this.callbackContext.success(uri.toString());
+                Log.d("TAG", uri + "");
+
+                //处理裁切后 Add By ZhuShunqing
+                if(this.allowEdit){
+//                  this.callbackContext.success(this.tmpfile);
+                    this.cropImageUri(uri);
+                }else{
+                    this.callbackContext.success(uri.toString());
+                }
+                
             } else {
                 String uriString = uri.toString();
                 // Get the path to the image. Makes loading so much easier.
@@ -456,21 +537,27 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
 
                 // If sending filename back
                 else if (destType == FILE_URI || destType == NATIVE_URI) {
-                    // Did we modify the image?
-                    if ( (this.targetHeight > 0 && this.targetWidth > 0) ||
-                            (this.correctOrientation && this.orientationCorrected) ) {
-                        try {
-                            String modifiedPath = this.ouputModifiedBitmap(bitmap, uri);
-                            // The modified image is cached by the app in order to get around this and not have to delete you
-                            // application cache I'm adding the current system time to the end of the file url.
-                            this.callbackContext.success("file://" + modifiedPath + "?" + System.currentTimeMillis());
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            this.failPicture("Error retrieving image.");
+
+                    //处理裁切 Add By ZhuShunqing
+                    if(this.allowEdit){
+                        this.cropImageUri(uri);
+                    }else{
+                        // Did we modify the image?
+                        if ( (this.targetHeight > 0 && this.targetWidth > 0) ||
+                                (this.correctOrientation && this.orientationCorrected) ) {
+                            try {
+                                String modifiedPath = this.ouputModifiedBitmap(bitmap, uri);
+                                // The modified image is cached by the app in order to get around this and not have to delete you
+                                // application cache I'm adding the current system time to the end of the file url.
+                                this.callbackContext.success("file://" + modifiedPath + "?" + System.currentTimeMillis());
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                this.failPicture("Error retrieving image.");
+                            }
                         }
-                    }
-                    else {
-                        this.callbackContext.success(uri.toString());
+                        else {
+                            this.callbackContext.success(uri.toString());
+                        }
                     }
                 }
                 if (bitmap != null) {
@@ -531,6 +618,12 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
                 this.failPicture("Selection did not complete!");
             }
         }
+        
+        //裁切图片完成 Add By ZhuShunqing
+        else if(requestCode == 1){
+            this.callbackContext.success(this.tmpfile);
+        }
+        
     }
 
     private int getImageOrientation(Uri uri) {
